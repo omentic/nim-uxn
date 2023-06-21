@@ -1,6 +1,14 @@
 import util
 
 type
+  Program* = object
+    main*: MainMemory   # main memory
+    io*: IOMemory       # io memory
+    ws*: Stack          # working stack
+    rs*: Stack          # return stack
+    pc*: uint16 = 256   # program counter
+    opcode: Opcode
+
   MainMemory* = array[65536, uint8]
   IOMemory* = array[16, Device]
   Device* = array[16, uint8]
@@ -10,6 +18,9 @@ type
     Underflow = 1
     Overflow = 2
     ZeroDiv = 3
+
+func init*(_: typedesc[Program]) =
+  return Program()
 
 func get*(memory: MainMemory, address: uint8 | uint16): uint8 =
   memory[address]
@@ -31,23 +42,5 @@ func push*(stack: var Stack, value: uint8) =
 func pop*(stack: var Stack): uint8 =
   result = stack.memory[stack.address]
   dec stack.address
-
-  #[MainMemory = concept
-    proc get(m: Self, a: uint8): uint8
-    proc set(m: var Self, a: uint8, v: uint8)
-    proc get(m: Self, a: uint16): uint16
-    proc set(m: var Self, a: uint16, v: uint16)]#
-
-  #[IOMemory = concept
-    proc get(m: Self, a: DeviceLabel): Device
-    proc set(m: var Self, a: DeviceLabel, v: Device)
-    proc get(m: Self, a: uint8): uint8
-    proc set(m: var Self, a: uint8, v: uint8)]#
-
-  #[Device* = concept
-    proc get(d: Self, a: range[0..15]): uint8
-    proc set(d: Self, a: range[0..15], v: uint8)]#
-
-  #[Stack = concept
-    proc pop(s: Self): uint8
-    proc push(s: var Self, v: uint8)]#
+func peek*(stack: Stack): uint8 =
+  stack.memory[stack.address]
