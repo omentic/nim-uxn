@@ -54,9 +54,12 @@ func pop*(stack: var Stack): uint8 =
     raise newException(Underflow, "01 Underflow")
   dec stack.address
   return stack.memory[stack.address]
-func peek*(stack: Stack, offset: int8): uint8 =
+func peek*(stack: Stack, offset: int8 = 0): uint8 =
   # todo: detect under/overflow
-  stack.memory[stack.address - offset]
+  if offset >= 0:
+    return stack.memory[stack.address - uint8(offset)]
+  else:
+    return stack.memory[stack.address + uint8(offset)]
 
 ## Program Functions
 func push*(program: var Program, bytes: uint8 | uint16) =
@@ -87,6 +90,24 @@ func pop16*(program: var Program): uint16 =
     else:
       return uint16(program.ws.pop(), program.ws.pop())
 func pop8x2*(program: var Program): (uint8, uint8) =
-  discard
+  if program.opcode.ret():
+    if program.opcode.keep():
+      return (program.rs.peek(), program.rs.peek(1))
+    else:
+      return (program.rs.pop(), program.rs.pop())
+  else:
+    if program.opcode.keep():
+      return (program.ws.peek(), program.ws.peek(1))
+    else:
+      return (program.ws.pop(), program.ws.pop())
 func pop16x2*(program: var Program): (uint16, uint16) =
-  discard
+  if program.opcode.ret():
+    if program.opcode.keep():
+      return (uint16(program.rs.peek(), program.rs.peek(1)), uint16(program.rs.peek(2), program.rs.peek(3)))
+    else:
+      return (uint16(program.rs.pop(), program.rs.pop()), uint16(program.rs.pop(), program.rs.pop()))
+  else:
+    if program.opcode.keep():
+      return (uint16(program.ws.peek(), program.ws.peek(1)), uint16(program.ws.peek(2), program.ws.peek(3)))
+    else:
+      return (uint16(program.ws.pop(), program.ws.pop()), uint16(program.ws.pop(), program.ws.pop()))

@@ -25,8 +25,12 @@ func step(program: var Program) =
     if program.opcode.short():
       program.pc = program.pop16()
     else:
-      program.pc += int8(program.pop8())
-  of JCN:
+      let relative = int8(program.pop8())
+      if relative >= 0:
+        program.pc += uint8(relative.abs)
+      else:
+        program.pc -= uint8(relative.abs)
+  of JCN: # if the byte on the top of the stack is not zero, move the PC relative to the signed byte at the second-top of the stack or to an absolute address in short mode.
     if program.opcode.short():
       let (condition, address) = program.pop16x2()
       if condition != 0:
@@ -34,13 +38,21 @@ func step(program: var Program) =
     else:
       let (condition, address) = program.pop8x2()
       if condition != 0:
-        program.pc += int8(address)
-  of JSR:
+        let address = int8(address)
+        if address >= 0:
+          program.pc += uint8(address.abs)
+        else:
+          program.pc -= uint8(address.abs)
+  of JSR: # pushes the PC to the return stack and moves the PC by a relative distance equal to the signed byte on the top of the stack or to an absolute address in short mode.
     program.rs.push(program.pc)
     if program.opcode.short():
       program.pc = program.pop16()
     else:
-      program.pc += int8(program.pop8())
+      let relative = int8(program.pop8())
+      if relative >= 0:
+        program.pc += uint8(relative.abs)
+      else:
+        program.pc -= uint8(relative.abs)
   of INC: # increments the value at the top of the stack by 1.
     program.handle((a) => (a+1))
   of POP: # removes the value at the top of the stack.
