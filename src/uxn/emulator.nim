@@ -1,4 +1,4 @@
-import uxn/[magic, opcodes, types]
+import magic, opcodes, types
 import std/sugar
 
 func step(program: var Program) =
@@ -16,14 +16,31 @@ func step(program: var Program) =
   of JSI: # pushes PC+2 to RS and moves PC to an address relative to the next short in memory.
     program.rs.push(program.pc + 2)
     program.pc += program.main.get(program.pc + 1)
-  of LIT:
-    discard
-  of JMP:
-    discard
+  of LIT: # pushes the next byte(s) in memory and moves the PC + 2.
+    if program.opcode.short():
+      program.push(program.pop16())
+    else:
+      program.push(program.pop8())
+  of JMP: # moves the PC by a relative distance equal to the signed byte on the top of the stack or to an absolute address in short mode.
+    if program.opcode.short():
+      program.pc = program.pop16()
+    else:
+      program.pc += int8(program.pop8())
   of JCN:
-    discard
+    if program.opcode.short():
+      let (condition, address) = program.pop16x2()
+      if condition != 0:
+        program.pc = address
+    else:
+      let (condition, address) = program.pop8x2()
+      if condition != 0:
+        program.pc += int8(address)
   of JSR:
-    discard
+    program.rs.push(program.pc)
+    if program.opcode.short():
+      program.pc = program.pop16()
+    else:
+      program.pc += int8(program.pop8())
   of INC: # increments the value at the top of the stack by 1.
     program.handle((a) => (a+1))
   of POP: # removes the value at the top of the stack.
