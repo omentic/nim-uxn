@@ -1,4 +1,4 @@
-import util
+import opcodes, util
 
 type
   Program* = object
@@ -7,17 +7,17 @@ type
     ws*: Stack          # working stack
     rs*: Stack          # return stack
     pc*: uint16 = 256   # program counter
-    opcode: Opcode
+    opcode*: Opcode
 
   MainMemory* = array[65536, uint8]
   IOMemory* = array[16, Device]
   Device* = array[16, uint8]
   Stack* = tuple[memory: array[256, uint8], address: uint8]
 
-  Error* = enum
-    Underflow = 1
-    Overflow = 2
-    ZeroDiv = 3
+  UxnError* = object of CatchableError
+  Underflow* = object of UxnError
+  Overflow* = object of UxnError
+  ZeroDiv* = object of UxnError
 
 func init*(_: typedesc[Program]) =
   return Program()
@@ -36,11 +36,20 @@ func set*(memory: var IOMemory, address: uint8, value: uint8) =
 func set*(memory: var IOMemory, address: range[0..15], value: Device) =
   memory[address] = value
 
+# fixme: stack semantics are wrong. i am very sure there is an off-by-one error wrt. pop/push & exceptions
 func push*(stack: var Stack, value: uint8) =
+  if stack.address == 255:
+    raise newException(Overflow, "02 Overflow")
   stack.memory[stack.address] = value
   inc stack.address
+func push*(stack: var Stack, value: uint16) =
+  # todo: order correct?
+  stack.push(uint8(value shr 8))
+  stack.push(uint8(value and 0b11111111))
 func pop*(stack: var Stack): uint8 =
-  result = stack.memory[stack.address]
+  if stack.address == 0:
+    raise newException(Underflow, "01 Underflow")
   dec stack.address
+  return stack.memory[stack.address]
 func peek*(stack: Stack): uint8 =
   stack.memory[stack.address]

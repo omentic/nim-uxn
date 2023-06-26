@@ -1,46 +1,32 @@
+import types, opcodes
 import std/sugar
 
-proc handle(program: var Program, op: uint -> uint) =
-  case program.opcode.mode()
-  of None:
-    program.ws.push(cast[uint8](op(program.ws.pop())))
-  of Short:
-    discard
-  of Return:
-    discard
-  of ReturnShort:
-    discard
-  of Keep:
-    discard
-  of KeepShort:
-    discard
-  of KeepReturn:
-    discard
-  of KeepShortReturn:
-    discard
-  else:
-    discard
-
+# all of the main cases, actually
 # two problems: varying # of args and different uint8 or uint16
+func handle*[T](program: var Program, op: T -> void) = discard
+func handle*[T](program: var Program, op: T -> T) = discard
+func handle*[T](program: var Program, op: T -> (T, T)) = discard
+func handle*[T](program: var Program, op: (T, T) -> void) = discard
+func handle*[T](program: var Program, op: (T, T) -> T) = discard
+func handle*[T](program: var Program, op: (T, T) -> (T, T)) = discard
+func handle*[T](program: var Program, op: (T, T, T) -> void) = discard
+func handle*[T](program: var Program, op: (T, T, T) -> (T, T, T)) = discard
 
-proc handle[T](program: var Program, op: (T, T) -> T) =
-  case program.opcode.mode()
-  of None:
-    discard
-  of Short:
-    discard
-  of Return:
-    discard
-  of ReturnShort:
-    discard
-  of Keep:
-    discard
-  of KeepShort:
-    discard
-  of KeepReturn:
-    discard
-  of KeepShortReturn:
+# this is vaguely what it'll look like idk
+#[
+func handle(program: var Program, op: func) =
+  func pop(stack: var Stack) =
+    if program.opcode.keep():
+      true
+    else:
+      false
+  let stack =
+    if program.opcode.ret():
+      program.rs
+    else:
+      program.ws
+  if program.opcode.short():
     discard
   else:
     discard
-
+]#
