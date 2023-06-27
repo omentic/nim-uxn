@@ -21,26 +21,36 @@ type
   ZeroDiv* = object of UxnError
 
 # woah wait how did this compile without a return type
-func init*(_: typedesc[Program], memory: MainMemory): Program = Program(main: memory)
+func init*(_: typedesc[Program], memory: MainMemory): Program =
+  Program(main: memory)
 
 func parse*(_: typedesc[MainMemory], input: string): MainMemory =
-  if input.len > int(uint16.high): raise newException(ValueError, "Failed to parse bytestream")
-  for i, c in input: result[i] = uint8(c)
+  if input.len > int(uint16.high):
+    raise newException(ValueError, "Failed to parse bytestream")
+  for i, c in input:
+    result[i] = uint8(c)
 
 func uint16*(a, b: uint8): uint16 = (a shl 8) and b
 
 ## Memory Functions
-func get*(memory: MainMemory, address: uint8 | uint16): uint8 = memory[address]
-func set*(memory: var MainMemory, address: uint8 | uint16, value: uint8) = memory[address] = value
-func get*(memory: IOMemory, address: range[0..15]): Device = memory[address]
-func get*(memory: IOMemory, address: uint8): uint8 = memory[address div 16][address mod 16]
-func set*(memory: var IOMemory, address: uint8, value: uint8) = memory[address div 16][address mod 16] = value
-func set*(memory: var IOMemory, address: range[0..15], value: Device) = memory[address] = value
+func get*(memory: MainMemory, address: uint8 | uint16): uint8 =
+  memory[address]
+func set*(memory: var MainMemory, address: uint8 | uint16, value: uint8) =
+  memory[address] = value
+func get*(memory: IOMemory, address: range[0..15]): Device =
+  memory[address]
+func get*(memory: IOMemory, address: uint8): uint8 =
+  memory[address div 16][address mod 16]
+func set*(memory: var IOMemory, address: uint8, value: uint8) =
+  memory[address div 16][address mod 16] = value
+func set*(memory: var IOMemory, address: range[0..15], value: Device) =
+  memory[address] = value
 
 ## Stack Functions
 # fixme: stack semantics are wrong. i am very sure there is an off-by-one error wrt. pop/push & exceptions
 func push*(stack: var Stack, value: uint8) =
-  if stack.address == 255: raise newException(Overflow, "02 Overflow")
+  if stack.address == 255:
+    raise newException(Overflow, "02 Overflow")
   stack.memory[stack.address] = value
   inc stack.address
 func push*(stack: var Stack, value: uint16) =
@@ -48,47 +58,68 @@ func push*(stack: var Stack, value: uint16) =
   stack.push(uint8(value shr 8))
   stack.push(uint8(value and 0b11111111))
 func pop*(stack: var Stack): uint8 =
-  if stack.address == 0: raise newException(Underflow, "01 Underflow")
+  if stack.address == 0:
+    raise newException(Underflow, "01 Underflow")
   dec stack.address
-  stack.memory[stack.address]
+  return stack.memory[stack.address]
 func peek*(stack: Stack, offset: int8 = 0): uint8 =
   # todo: detect under/overflow
   # if offset > stack.address:
   #   raise newException(Underflow, "01 Underflow")
   # if offset < (255 - stack.address):
   #   raise newException(Overflow, "02 Overflow")
-  if offset >= 0: stack.memory[stack.address - uint8(offset)]
-  else: stack.memory[stack.address + uint8(offset)]
+  if offset >= 0:
+    return stack.memory[stack.address - uint8(offset)]
+  else:
+    return stack.memory[stack.address + uint8(offset)]
 
 ## Program Functions
 func push*(program: var Program, bytes: uint8 | uint16) =
-  if program.opcode.ret(): program.rs.push(bytes)
-  else: program.ws.push(bytes)
+  if program.opcode.ret():
+    program.rs.push(bytes)
+  else:
+    program.ws.push(bytes)
 func pop8*(program: var Program): uint8 =
   if program.opcode.ret():
-    if program.opcode.keep(): program.rs.peek()
-    else: program.rs.pop()
+    if program.opcode.keep():
+      return program.rs.peek()
+    else:
+      return program.rs.pop()
   else:
-    if program.opcode.keep(): program.ws.peek()
-    else: program.ws.pop()
+    if program.opcode.keep():
+      return program.ws.peek()
+    else:
+      return program.ws.pop()
 func pop16*(program: var Program): uint16 =
   if program.opcode.ret():
-    if program.opcode.keep(): uint16(program.rs.peek(), program.rs.peek(1))
-    else: uint16(program.rs.pop(), program.rs.pop())
+    if program.opcode.keep():
+      return uint16(program.rs.peek(), program.rs.peek(1))
+    else:
+      return uint16(program.rs.pop(), program.rs.pop())
   else:
-    if program.opcode.keep(): uint16(program.ws.peek(), program.ws.peek(1))
-    else: uint16(program.ws.pop(), program.ws.pop())
+    if program.opcode.keep():
+      return uint16(program.ws.peek(), program.ws.peek(1))
+    else:
+      return uint16(program.ws.pop(), program.ws.pop())
 func pop8x2*(program: var Program): (uint8, uint8) =
   if program.opcode.ret():
-    if program.opcode.keep(): (program.rs.peek(), program.rs.peek(1))
-    else: (program.rs.pop(), program.rs.pop())
+    if program.opcode.keep():
+      return (program.rs.peek(), program.rs.peek(1))
+    else:
+      return (program.rs.pop(), program.rs.pop())
   else:
-    if program.opcode.keep(): (program.ws.peek(), program.ws.peek(1))
-    else: (program.ws.pop(), program.ws.pop())
+    if program.opcode.keep():
+      return (program.ws.peek(), program.ws.peek(1))
+    else:
+      return (program.ws.pop(), program.ws.pop())
 func pop16x2*(program: var Program): (uint16, uint16) =
   if program.opcode.ret():
-    if program.opcode.keep(): (uint16(program.rs.peek(), program.rs.peek(1)), uint16(program.rs.peek(2), program.rs.peek(3)))
-    else: (uint16(program.rs.pop(), program.rs.pop()), uint16(program.rs.pop(), program.rs.pop()))
+    if program.opcode.keep():
+      return (uint16(program.rs.peek(), program.rs.peek(1)), uint16(program.rs.peek(2), program.rs.peek(3)))
+    else:
+      return (uint16(program.rs.pop(), program.rs.pop()), uint16(program.rs.pop(), program.rs.pop()))
   else:
-    if program.opcode.keep(): (uint16(program.ws.peek(), program.ws.peek(1)), uint16(program.ws.peek(2), program.ws.peek(3)))
-    else: (uint16(program.ws.pop(), program.ws.pop()), uint16(program.ws.pop(), program.ws.pop()))
+    if program.opcode.keep():
+      return (uint16(program.ws.peek(), program.ws.peek(1)), uint16(program.ws.peek(2), program.ws.peek(3)))
+    else:
+      return (uint16(program.ws.pop(), program.ws.pop()), uint16(program.ws.pop(), program.ws.pop()))
