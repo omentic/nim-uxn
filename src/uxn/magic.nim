@@ -1,18 +1,18 @@
 import types, opcodes
 import std/sugar
 
-macro handle*(program: var Program, op: untyped) = discard
+macro handle*(program: var Program, op: typed) = discard
 
 # all of the main cases, actually
 # two problems: varying # of args and different uint8 or uint16
-func handle[T](program: var Program, op: T -> void) = discard
-func handle[T](program: var Program, op: T -> T) = discard
-func handle[T](program: var Program, op: T -> (T, T)) = discard
-func handle[T](program: var Program, op: (T, T) -> void) = discard
-func handle[T](program: var Program, op: (T, T) -> T) = discard
-func handle[T](program: var Program, op: (T, T) -> (T, T)) = discard
-func handle[T](program: var Program, op: (T, T, T) -> void) = discard
-func handle[T](program: var Program, op: (T, T, T) -> (T, T, T)) = discard
+# func handle[T](program: var Program, op: T -> void) = discard
+# func handle[T](program: var Program, op: T -> T) = discard
+# func handle[T](program: var Program, op: T -> (T, T)) = discard
+# func handle[T](program: var Program, op: (T, T) -> void) = discard
+# func handle[T](program: var Program, op: (T, T) -> T) = discard
+# func handle[T](program: var Program, op: (T, T) -> (T, T)) = discard
+# func handle[T](program: var Program, op: (T, T, T) -> void) = discard
+# func handle[T](program: var Program, op: (T, T, T) -> (T, T, T)) = discard
 
 # this is vaguely what it'll look like idk
 #[

@@ -33,10 +33,10 @@ type Literal* = enum
 
 # hell. fucking. yes.
 converter literalify*(op: Literal): Opcode =
-  cast[uint8](op.ord)
+  uint8(op.ord)
 
 type Mode* = enum
   None Short Return ReturnShort Keep KeepShort KeepReturn KeepShortReturn
 
 converter modeify*(op: Mode): Opcode =
-  cast[uint8](op.ord)
+  uint8(op.ord)

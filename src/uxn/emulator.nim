@@ -1,7 +1,7 @@
 import magic, opcodes, types
-import std/sugar
+import std/[strformat, sugar]
 
-func step(program: var Program) =
+func step*(program: var Program) =
   program.opcode = program.main.get(program.pc)
   case program.opcode.demode()
   of BRK: # ends the evaluation of the current vector.
@@ -10,7 +10,7 @@ func step(program: var Program) =
     if program.ws.pop() != 0:
       program.pc += program.main.get(program.pc + 1)
     else:
-      program.pc += 2
+      inc program.pc
   of JMI: # moves the PC to an address relative to the next short in memory.
     program.pc += program.main.get(program.pc + 1)
   of JSI: # pushes PC+2 to RS and moves PC to an address relative to the next short in memory.
@@ -21,6 +21,7 @@ func step(program: var Program) =
       program.push(program.pop16())
     else:
       program.push(program.pop8())
+    inc program.pc
   of JMP: # moves the PC by a relative distance equal to the signed byte on the top of the stack or to an absolute address in short mode.
     if program.opcode.short():
       program.pc = program.pop16()
@@ -86,9 +87,9 @@ func step(program: var Program) =
   of STR: # writes a value to a relative address in relation to the PC within a int8 range.
     program.handle((a, b) => (program.main.set(program.pc + int8(b), a)))
   of LDA: # pushes the value at a absolute address to the top of the stack.
-    program.handle((a, b) => (program.main.get((a shl 4) and b)))
+    program.handle((a, b) => (program.main.get(uint16(a, b))))
   of STA: # writes a value to an absolute address.
-    program.handle((a, b, c) => (program.main.set((b shl 4) and (c), a)))
+    program.handle((a, b, c) => (program.main.set(uint16(b, c), a)))
   of DEI: # pushes a value from the device page to the top of the stack.
     program.handle((a) => (program.io.get(a)))
   of DEO: # writes a value to the device page.
@@ -110,8 +111,9 @@ func step(program: var Program) =
   of SFT: # shifts the bits of the second value of the stack to the left or right, depending...
     program.handle((a, b) => ((b shr (a and 0b00001111'u8)) shl (a shr 4)))
   else:
-    raise newException(Exception, "what the fuck")
+    raise newException(ValueError, &"Unknown opcode {program.opcode.demode()}. Crashing...")
+  inc program.pc
 
-func eval*(program: var Program): uint8 =
+func eval*(program: var Program) =
   while true:
     program.step()

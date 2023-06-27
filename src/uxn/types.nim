@@ -1,5 +1,6 @@
 import opcodes
 
+## Type Declarations
 type
   Program* = object
     main*: MainMemory   # main memory
@@ -7,7 +8,7 @@ type
     ws*: Stack          # working stack
     rs*: Stack          # return stack
     pc*: uint16 = 256   # program counter
-    opcode*: Opcode
+    opcode*: Opcode     # current opcode
 
   MainMemory* = array[65536, uint8]
   IOMemory* = array[16, Device]
@@ -19,10 +20,17 @@ type
   Overflow* = object of UxnError
   ZeroDiv* = object of UxnError
 
-func init*(_: typedesc[Program]) =
-  return Program()
+# woah wait how did this compile without a return type
+func init*(_: typedesc[Program], memory: MainMemory): Program =
+  Program(main: memory)
 
-func uint16(a, b: uint8): uint16 = (a shl 8) and b
+func parse*(_: typedesc[MainMemory], input: string): MainMemory =
+  if input.len > int(uint16.high):
+    raise newException(ValueError, "Failed to parse bytestream")
+  for i, c in input:
+    result[i] = uint8(c)
+
+func uint16*(a, b: uint8): uint16 = (a shl 8) and b
 
 ## Memory Functions
 func get*(memory: MainMemory, address: uint8 | uint16): uint8 =
@@ -56,6 +64,10 @@ func pop*(stack: var Stack): uint8 =
   return stack.memory[stack.address]
 func peek*(stack: Stack, offset: int8 = 0): uint8 =
   # todo: detect under/overflow
+  # if offset > stack.address:
+  #   raise newException(Underflow, "01 Underflow")
+  # if offset < (255 - stack.address):
+  #   raise newException(Overflow, "02 Overflow")
   if offset >= 0:
     return stack.memory[stack.address - uint8(offset)]
   else:
