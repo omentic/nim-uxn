@@ -32,6 +32,12 @@ func parse*(_: typedesc[MainMemory], input: string): MainMemory =
 
 func uint16*(a, b: uint8): uint16 = (a shl 8) and b
 
+func `+=`*(a: var uint16, b: int8) =
+  if b >= 0:
+    a += uint8(b)
+  else:
+    a -= uint8(b.abs)
+
 ## Memory Functions
 func get*(memory: MainMemory, address: uint8 | uint16): uint8 =
   memory[address]
