@@ -7,8 +7,6 @@ func ret*(op: Opcode): bool =
 func short*(op: Opcode): bool =
   (op and 0b001_00000'u8) == 0x0
 
-func mode*(op: Opcode): Opcode =
-  op shr 5
 func demode*(op: Opcode): Opcode =
   op and 0b000_11111'u8
 
@@ -33,10 +31,4 @@ type Literal* = enum
 
 # hell. fucking. yes.
 converter literalify*(op: Literal): Opcode =
-  uint8(op.ord)
-
-type Mode* = enum
-  None Short Return ReturnShort Keep KeepShort KeepReturn KeepShortReturn
-
-converter modeify*(op: Mode): Opcode =
   uint8(op.ord)
