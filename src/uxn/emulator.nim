@@ -1,67 +1,136 @@
-import magic, opcodes, types
-import std/[strformat, sugar]
+import opcodes, types
+import std/[sequtils, strformat, sugar]
+
+macro handle(program: var Program, body: untyped) =
+  result = newTree(nnkCaseStmt)
+  result.add(body[0])
+
+  for branch in body[1 ..< ^1]:
+    if branch.kind == nnkInfix and branch[0] == ident("=>"):
+      var parameters: NimNode = newTree(nnkTupleConstr)
+      var pop8: NimNode = newTree(nnkTupleConstr)
+      var pop16: NimNode = newTree(nnkTupleConstr)
+      let pop8_literal = quote do: program.pop8()
+      let pop16_literal = quote do: program.pop16()
+      let operation = branch[2]
+      for param in parameters:
+        if param.kind == nnkIdent:
+          parameters.append(param)
+          pop8.append(pop8_literal)
+          pop16.append(pop16_literal)
+        else:
+          assert param.kind == nnkExprColonExpr
+          if param[1] == ident("byte"):
+            pop8.append(pop8_literal)
+            pop16.append(pop8_literal)
+          elif param[1] == ident("short"):
+            pop8.append(pop16_literal)
+            pop16.append(pop16_literal)
+          else:
+            raise Error
+          parameters.add(param[0])
+
+      # Nim doesn't like `let (a) = (function)`
+      if pop8.sons.len == 1 or pop16.sons.len == 1:
+        pop8 = pop8_literal
+        pop16 = pop16_literal
+
+      result.add quote do:
+        if program.opcode.short():
+          let `parameters` = `pop16`
+          program.restore()
+          program.push(`operation`)
+        else:
+          let `parameters` = `pop8`
+          program.restore()
+          program.push(`operation`)
+
+    else:
+      result.add(branch)
 
 func step*(program: var Program) =
   program.opcode = program.main.get(program.pc)
-  case program.opcode.demode()
+  program.pc.inc()
+
+  handle program.opcode.ins()
   of BRK:
-    discard
+    discard # todo
   of JCI:
-    if program.ws.pop() != 0: program.pc += program.main.get(program.pc + 1)
-    else: inc program.pc
+    if program.ws.pop() != 0: program.pc += program.main.get(program.pc)
+    else: program.pc.inc()
   of JMI:
-    program.pc += program.main.get(program.pc + 1)
+    program.pc += program.main.get(program.pc)
   of JSI:
     program.rs.push(program.pc + 2)
-    program.pc += program.main.get(program.pc + 1)
+    program.pc += program.main.get(program.pc)
   of LIT:
-    if program.opcode.short(): program.push(program.pop16())
-    else: program.push(program.pop8())
-    inc program.pc
+    if program.opcode.short():
+      let value = program.pop16()
+      program.restore() # LIT always has keep enabled
+      program.push(value)
+    else:
+      let value = program.pop8()
+      program.restore()
+      program.push(value)
+    program.pc.inc()
   of JMP:
-    if program.opcode.short(): program.pc = program.pop16()
-    else: program.pc += int8(program.pop8())
+    if program.opcode.short():
+      program.pc = program.pop16()
+    else:
+      program.pc += int8(program.pop8())
+    program.restore()
   of JCN:
     if program.opcode.short():
-      let (condition, address) = program.pop16x2()
+      let (condition, address) = (program.pop16(), program.pop16())
       if condition != 0: program.pc = address
     else:
-      let (condition, address) = program.pop8x2()
+      let (condition, address) = (program.pop8(), program.pop8())
       if condition != 0: program.pc += int8(address)
+    program.restore()
   of JSR:
-    program.rs.push(program.pc + 1)
-    if program.opcode.short(): program.pc = program.pop16()
-    else: program.pc += int8(program.pop8())
-  of INC: program.handle((a) => (a+1))
-  of POP: program.handle((a) => ())
-  of NIP: program.handle((a, b) => (b))
-  of SWP: program.handle((a, b) => (b, a))
-  of ROT: program.handle((a, b, c) => (b, c, a))
-  of DUP: program.handle((a) => (a, a))
-  of OVR: program.handle((a, b) => (a))
-  of EQU: program.handle((a, b) => (typeof(a)(a == b)))
-  of NEQ: program.handle((a, b) => (typeof(a)(a != b)))
-  of GTH: program.handle((a, b) => (typeof(a)(a > b)))
-  of LTH: program.handle((a, b) => (typeof(a)(a < b)))
-  of STH: program.handle((a) => (program.rs.push(a)))
-  of LDZ: program.handle((a) => (program.main.get(a)))
-  of STZ: program.handle((a, b) => (program.main.set(b, a)))
-  of LDR: program.handle((a) => (program.main.get(program.pc + int8(a))))
-  of STR: program.handle((a, b) => (program.main.set(program.pc + int8(b), a)))
-  of LDA: program.handle((a, b) => (program.main.get(short(a, b))))
-  of STA: program.handle((a, b, c) => (program.main.set(short(b, c), a)))
-  of DEI: program.handle((a) => (program.io.get(a)))
-  of DEO: program.handle((a, b) => (program.io.set(b, a)))
-  of ADD: program.handle((a, b) => (a+b))
-  of SUB: program.handle((a, b) => (a-b))
-  of MUL: program.handle((a, b) => (a*b))
-  of DIV: program.handle((a, b) => (if b == 0: raise newException(ZeroDiv, "03 Division By Zero") else: a div b))
-  of AND: program.handle((a, b) => (a and b))
-  of ORA: program.handle((a, b) => (a or b))
-  of EOR: program.handle((a, b) => (a xor b))
-  of SFT: program.handle((a, b) => ((b shr (a and 0b00001111'u8)) shl (a shr 4)))
-  else: raise newException(ValueError, &"Unknown opcode {program.opcode.demode()}. Crashing...")
-  inc program.pc
+    if program.opcode.short():
+      let value = program.pop16()
+      program.rs.push(program.pc)
+      program.pc = value
+    else:
+      let value = program.pop8()
+      program.rs.push(program.pc)
+      program.pc += int8(value)
+    program.restore()
+
+  # note: counterconventionally, (a, b: byte) here means (a: byte | short, b: byte)
+  of LDZ: (a: byte) => (program.main.get(a))
+  of LDR: (a: byte) => (program.main.get(program.pc + int8(b)))
+  of LDA: (a: short) => (program.main.get(a))
+  of STZ: (a, b: byte) => (program.main.set(b, a))
+  of STR: (a, b: byte) => (program.main.set(program.pc + int8(b), a))
+  of STA: (a, b: short) => (program.main.set(b, a))
+  of DEI: (a: byte) => (program.io.get(a)) # todo
+  of DEO: (a, b: byte) => (program.io.set(b, a)) # todo
+  of STH: (a) => (program.rs.push(a))
+
+  of INC: (a) => (a + 1)
+  of POP: (a) => ()
+  of NIP: (a, b) => (b)
+  of SWP: (a, b) => (b, a)
+  of ROT: (a, b, c) => (b, c, a)
+  of DUP: (a) => (a, a)
+  of OVR: (a, b) => (a)
+  of EQU: (a, b) => (typeof(a)(a == b))
+  of NEQ: (a, b) => (typeof(a)(a != b))
+  of GTH: (a, b) => (typeof(a)(a > b))
+  of LTH: (a, b) => (typeof(a)(a < b))
+
+  of ADD: (a, b) => (a + b)
+  of SUB: (a, b) => (a - b)
+  of MUL: (a, b) => (a * b)
+  of DIV: (a, b) => (a // b)
+  of AND: (a, b) => (a and b)
+  of ORA: (a, b) => (a or b)
+  of EOR: (a, b) => (a xor b)
+  of SFT: (a, b) => ((b shr (a and 0b00001111'u8)) shl (a shr 4))
+
+  else: raise newException(ValueError, &"Unknown opcode {program.opcode.ins()}. Crashing...")
 
 func eval*(program: var Program) =
   while true:

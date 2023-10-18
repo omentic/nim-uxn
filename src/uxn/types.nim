@@ -98,6 +98,13 @@ func push*(queue: var Queue, value: byte) =
   queue.memory[queue.back] = value
   queue.back = queue_inc(queue.back)
 
+## Checked division
+template `//`*(a, b) =
+  if `b` == 0:
+    raise newException(ZeroDiv, "03 Division by Zero")
+  else:
+    a div b
+
 # Program functions
 func push*(program: var Program, bytes: byte | short) =
   program.cs.push(bytes)
@@ -110,3 +117,12 @@ func pop16*(program: var Program): short =
   if program.opcode.keep():
     program.pq.push(byte(result shr 8))
     program.pq.push(byte(result and 0b11111111))
+
+func restore*(program: var Program) =
+  if program.opcode.keep():
+    while true:
+      let value = program.pq.pop()
+      if value.is_some:
+        program.cs.push(value!)
+  else:
+    program.pq = Queue()
