@@ -1,19 +1,23 @@
 import opcodes
 
-## Type Declarations
+type short* = uint16
+
+# Type Declarations
 type
   Program* = object
     main*: MainMemory   # main memory
     io*: IOMemory       # io memory
     ws*: ref Stack      # working stack
     rs*: ref Stack      # return stack
-    pc*: uint16 = 256   # program counter
+    pq*: Queue          # program queue (for keep)
+    pc*: short = 256    # program counter
     opcode*: Opcode     # current opcode
 
-  MainMemory* = array[65536, uint8]
+  MainMemory* = array[65536, byte]
   IOMemory* = array[16, Device]
-  Device* = array[16, uint8]
-  Stack* = tuple[memory: array[256, uint8], address: uint8]
+  Device* = array[16, byte]
+  Stack* = tuple[memory: array[255, byte], address: byte]
+  Queue* = tuple[memory: array[6, byte], front, back: byte]
 
   UxnError* = object of CatchableError
   Underflow* = object of UxnError
@@ -24,7 +28,8 @@ type
 func init*(_: typedesc[Program], memory: MainMemory): Program =
   Program(main: memory)
 
-# a smidgen of magic
+## A smidgen of magic. Gets the current stack given an opcode (of the program).
+## Disguised to look like a field of Program.
 func cs*(program: var Program): ref Stack =
   if program.opcode.ret():
     program.rs
@@ -32,87 +37,76 @@ func cs*(program: var Program): ref Stack =
     program.ws
 
 func parse*(_: typedesc[MainMemory], input: string): MainMemory =
-  if input.len > int(uint16.high):
+  if input.len > int(short.high):
     raise newException(ValueError, "Failed to parse bytestream")
   for i, c in input:
-    result[i] = uint8(c)
+    result[i] = byte(c)
 
-func uint16*(a, b: uint8): uint16 = (a shl 8) and b
+# func `+`*(a: short, b: int8): short =
+#   if b >= 0: a + byte(b)
+#   else: a - byte(b.abs)
+func `+=`*(a: var short, b: int8) =
+  if b >= 0: a += byte(b)
+  else: a -= byte(b.abs)
 
-func `+=`*(a: var uint16, b: int8) =
-  if b >= 0:
-    a += uint8(b)
-  else:
-    a -= uint8(b.abs)
-
-## Memory Functions
-func get*(memory: MainMemory, address: uint8 | uint16): uint8 =
+## Main Memory functions
+func get*(memory: MainMemory, address: byte | short): byte =
   memory[address]
-func set*(memory: var MainMemory, address: uint8 | uint16, value: uint8) =
+func set*(memory: var MainMemory, address: byte | short, value: byte) =
   memory[address] = value
-func get*(memory: IOMemory, address: range[0..15]): Device =
-  memory[address]
-func get*(memory: IOMemory, address: uint8): uint8 =
+func set*(memory: var MainMemory, address: byte | short, value: short) =
+  memory.set(address, byte(value shr 8))
+  memory.set(address + 1, byte(value and 0b11111111))
+
+# IOMemory functions
+func get*(memory: IOMemory, address: Label): Device =
+  memory[address.ord]
+func get*(memory: IOMemory, address: byte): byte =
   memory[address div 16][address mod 16]
-func set*(memory: var IOMemory, address: uint8, value: uint8) =
+func set*(memory: var IOMemory, address: byte, value: byte) =
   memory[address div 16][address mod 16] = value
 func set*(memory: var IOMemory, address: range[0..15], value: Device) =
   memory[address] = value
 
-## Stack Functions
-# fixme: stack semantics are wrong. i am very sure there is an off-by-one error wrt. pop/push & exceptions
-func push*(stack: ref Stack, value: uint8) =
-  if stack.address == 255:
-    raise newException(Overflow, "02 Overflow")
-  stack.memory[stack.address] = value
-  inc stack.address
-func push*(stack: ref Stack, value: uint16) =
-  # todo: order correct?
-  stack.push(uint8(value shr 8))
-  stack.push(uint8(value and 0b11111111))
-func pop*(stack: ref Stack): uint8 =
+# Stack functions
+func pop*(stack: ref Stack): byte =
   if stack.address == 0:
     raise newException(Underflow, "01 Underflow")
   dec stack.address
   return stack.memory[stack.address]
-func peek*(stack: ref Stack, offset: int8 = 0): uint8 =
-  # todo: detect under/overflow
-  if offset >= 0:
-    stack.memory[stack.address - uint8(offset)]
-  else:
-    stack.memory[stack.address + uint8(offset)]
+func push*(stack: ref Stack, value: byte) =
+  if stack.address == 255:
+    raise newException(Overflow, "02 Overflow")
+  stack.memory[stack.address] = value
+  inc stack.address
+func push*(stack: ref Stack, value: short) =
+  stack.push(byte(value shr 8))
+  stack.push(byte(value and 0b11111111))
 
-## Program Functions
-func push*(program: var Program, bytes: uint8 | uint16) =
+# Queue functions
+func queue_inc(address: byte): byte =
+  if address == 5: 0
+  else: address + 1
+func pop*(queue: var Queue): byte =
+  if queue.front == queue.back:
+    raise newException(Underflow, "01 Underflow")
+  result = queue.memory[queue.front]
+  queue.front = queue_inc(queue.front)
+func push*(queue: var Queue, value: byte) =
+  if queue_inc(queue.back) == queue.front:
+    raise newException(Overflow, "02 Overflow")
+  queue.memory[queue.back] = value
+  queue.back = queue_inc(queue.back)
+
+# Program functions
+func push*(program: var Program, bytes: byte | short) =
   program.cs.push(bytes)
-func pop8*(program: var Program): uint8 =
+func pop8*(program: var Program): byte =
+  result = program.cs.pop()
   if program.opcode.keep():
-    program.cs.peek()
-  else:
-    program.cs.pop()
-func pop16*(program: var Program): uint16 =
+    program.pq.push(result)
+func pop16*(program: var Program): short =
+  result = short((program.cs.pop() shl 8) and program.cs.pop())
   if program.opcode.keep():
-    uint16(program.cs.peek(), program.cs.peek(1))
-  else:
-    uint16(program.cs.pop(), program.cs.pop())
-func pop8x2*(program: var Program): (uint8, uint8) =
-  if program.opcode.keep():
-    (program.cs.peek(), program.cs.peek(1))
-  else:
-    (program.cs.pop(), program.cs.pop())
-func pop16x2*(program: var Program): (uint16, uint16) =
-  if program.opcode.keep():
-    (uint16(program.cs.peek(), program.cs.peek(1)), uint16(program.cs.peek(2), program.cs.peek(3)))
-  else:
-    (uint16(program.cs.pop(), program.cs.pop()), uint16(program.cs.pop(), program.cs.pop()))
-func pop8x3*(program: var Program): (uint8, uint8, uint8) =
-  if program.opcode.keep():
-    (program.cs.peek(), program.cs.peek(1), program.cs.peek(2))
-  else:
-    (program.cs.pop(), program.cs.pop(), program.cs.pop())
-func pop16x3*(program: var Program): (uint16, uint16, uint16) =
-  if program.opcode.keep():
-    (uint16(program.cs.peek(), program.cs.peek(1)), uint16(program.cs.peek(2), program.cs.peek(3)), uint16(program.cs.peek(4), program.cs.peek(5)))
-  else:
-    (uint16(program.cs.pop(), program.cs.pop()), uint16(program.cs.pop(), program.cs.pop()), uint16(program.cs.pop(), program.cs.pop()))
-# todo: can we abstract the above away any?
+    program.pq.push(byte(result shr 8))
+    program.pq.push(byte(result and 0b11111111))

@@ -1,17 +1,18 @@
 type Opcode* = uint8
 
 func keep*(op: Opcode): bool =
-  (op and 0b100_00000'u8) == 0x0
+  (op and 0b100_00000'u8) == 0b0
 func ret*(op: Opcode): bool =
-  (op and 0b010_00000'u8) == 0x0
+  (op and 0b010_00000'u8) == 0b0
 func short*(op: Opcode): bool =
-  (op and 0b001_00000'u8) == 0x0
+  (op and 0b001_00000'u8) == 0b0
 
-func demode*(op: Opcode): Opcode =
+## Get the raw instruction from an Opcode
+func ins*(op: Opcode): Opcode =
   op and 0b000_11111'u8
 
-# we take *heavy* advantage of ordinal enums.
-type Literal* = enum
+## Enums in Nim are ordinal. These represent the opcodes, numerically.
+type Instruction* = enum
   BRK INC POP NIP SWP ROT DUP OVR EQU NEQ GTH LTH JMP JCN JSR STH
   LDZ STZ LDR STR LDA STA DEI DEO ADD SUB MUL DIV AND ORA EOR SFT
   JCI   INC2  POP2  NIP2  SWP2  ROT2  DUP2  OVR2  EQU2  NEQ2  GTH2  LTH2  JMP2  JCN2  JSR2  STH2
@@ -29,6 +30,9 @@ type Literal* = enum
   LIT2r  INC2kr POP2kr NIP2kr SWP2kr ROT2kr DUP2kr OVR2kr EQU2kr NEQ2kr GTH2kr LTH2kr JMP2kr JCN2kr JSR2kr STH2kr
   LDZ2kr STZ2kr LDR2kr STR2kr LDA2kr STA2kr DEI2kr DEO2kr ADD2kr SUB2kr MUL2kr DIV2kr AND2kr ORA2kr EOR2kr SFT2kr
 
-# hell. fucking. yes.
-converter literalify*(op: Literal): Opcode =
-  uint8(op.ord)
+## Device names
+type Label* = enum
+  Zero One Two Three Four Five Six Seven Eight Nine Ten Eleven Twelve Thirteen Fourteen Fifteen
+
+## The enum Instruction is implicitly convertable to the uint8 Opcode
+converter instructify*(op: Instruction): Opcode = uint8(op.ord)
