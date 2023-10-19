@@ -1,5 +1,6 @@
-import uxn/[emulator, types]
 import std/[os, strformat]
+import uxn/[uxn, varvara, tal, types]
+export uxn, varvara, tal
 
 proc main() =
   if paramCount() < 1 or paramStr(1) == "--help":

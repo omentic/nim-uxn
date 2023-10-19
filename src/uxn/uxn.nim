@@ -1,5 +1,5 @@
-import opcodes, types
 import std/[macros, sequtils, strformat, sugar]
+import types
 
 macro handle(opcode: Opcode, body: varargs[untyped]): untyped =
   result = newTree(nnkCaseStmt)
@@ -56,7 +56,7 @@ macro handle(opcode: Opcode, body: varargs[untyped]): untyped =
   debugecho "macro has been run"
 
 func step*(program: var Program) =
-  program.opcode = program.main.get(program.pc)
+  program.opcode = Opcode(program.main.get(program.pc))
   program.pc.inc()
 
   handle program.opcode.ins():
