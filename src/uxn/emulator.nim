@@ -1,58 +1,65 @@
 import opcodes, types
-import std/[sequtils, strformat, sugar]
+import std/[macros, sequtils, strformat, sugar]
 
-macro handle(program: var Program, body: untyped) =
+macro handle(opcode: Opcode, body: varargs[untyped]): untyped =
   result = newTree(nnkCaseStmt)
-  result.add(body[0])
+  result.add(opcode)
 
-  for branch in body[1 ..< ^1]:
-    if branch.kind == nnkInfix and branch[0] == ident("=>"):
-      var parameters: NimNode = newTree(nnkTupleConstr)
-      var pop8: NimNode = newTree(nnkTupleConstr)
-      var pop16: NimNode = newTree(nnkTupleConstr)
+  for branch in body:
+    if branch.kind == nnkOfBranch and branch[1].kind == nnkStmtList and
+       branch[1][0].kind == nnkInfix and branch[1][0][0] == ident("=>"):
+      let function = branch[1][0]
+      var parameters = newTree(nnkTupleConstr)
+      var pushes = newTree(nnkStmtList)
+      var pop8 = newTree(nnkTupleConstr)
+      var pop16 = newTree(nnkTupleConstr)
       let pop8_literal = quote do: program.pop8()
       let pop16_literal = quote do: program.pop16()
-      let operation = branch[2]
-      for param in parameters:
-        if param.kind == nnkIdent:
-          parameters.append(param)
-          pop8.append(pop8_literal)
-          pop16.append(pop16_literal)
-        else:
-          assert param.kind == nnkExprColonExpr
+
+      assert function[1].kind == nnkTupleConstr or function[1].kind == nnkPar
+      for param in function[1]:
+        case param.kind
+        of nnkIdent:
+          parameters.add(param)
+          pop8.add(pop8_literal)
+          pop16.add(pop16_literal)
+        of nnkExprColonExpr:
           if param[1] == ident("byte"):
-            pop8.append(pop8_literal)
-            pop16.append(pop8_literal)
+            pop8.add(pop8_literal)
+            pop16.add(pop8_literal)
           elif param[1] == ident("short"):
-            pop8.append(pop16_literal)
-            pop16.append(pop16_literal)
+            pop8.add(pop16_literal)
+            pop16.add(pop16_literal)
           else:
-            raise Error
+            error("Expected type to be either byte or short!", param)
           parameters.add(param[0])
+        else:
+          error("Expected to find a tuple of parameters!", param)
 
-      # Nim doesn't like `let (a) = (function)`
-      if pop8.sons.len == 1 or pop16.sons.len == 1:
-        pop8 = pop8_literal
-        pop16 = pop16_literal
+      for operation in function[2]:
+        pushes.add quote do:
+          program.push(`operation`)
 
-      result.add quote do:
-        if program.opcode.short():
+      result.add newTree(nnkOfBranch)
+      result[^1].add branch[0]
+      result[^1].add quote do:
+        if program.opcode.short_mode():
           let `parameters` = `pop16`
           program.restore()
-          program.push(`operation`)
+          `pushes`
         else:
           let `parameters` = `pop8`
           program.restore()
-          program.push(`operation`)
-
+          `pushes`
     else:
       result.add(branch)
+  debugecho "macro has been run"
 
 func step*(program: var Program) =
   program.opcode = program.main.get(program.pc)
   program.pc.inc()
 
-  handle program.opcode.ins()
+  handle program.opcode.ins():
   of BRK:
     discard # todo
   of JCI:
@@ -64,23 +71,21 @@ func step*(program: var Program) =
     program.rs.push(program.pc + 2)
     program.pc += program.main.get(program.pc)
   of LIT:
-    if program.opcode.short():
-      let value = program.pop16()
-      program.restore() # LIT always has keep enabled
+    if program.opcode.short_mode():
+      let value = short((program.main.get(program.pc) shl 8) and program.main.get(program.pc+1))
       program.push(value)
     else:
-      let value = program.pop8()
-      program.restore()
+      let value = program.main.get(program.pc)
       program.push(value)
     program.pc.inc()
   of JMP:
-    if program.opcode.short():
+    if program.opcode.short_mode():
       program.pc = program.pop16()
     else:
       program.pc += int8(program.pop8())
     program.restore()
   of JCN:
-    if program.opcode.short():
+    if program.opcode.short_mode():
       let (condition, address) = (program.pop16(), program.pop16())
       if condition != 0: program.pc = address
     else:
@@ -88,7 +93,7 @@ func step*(program: var Program) =
       if condition != 0: program.pc += int8(address)
     program.restore()
   of JSR:
-    if program.opcode.short():
+    if program.opcode.short_mode():
       let value = program.pop16()
       program.rs.push(program.pc)
       program.pc = value
@@ -100,10 +105,10 @@ func step*(program: var Program) =
 
   # note: counterconventionally, (a, b: byte) here means (a: byte | short, b: byte)
   of LDZ: (a: byte) => (program.main.get(a))
-  of LDR: (a: byte) => (program.main.get(program.pc + int8(b)))
+  of LDR: (a: byte) => (program.main.get(program.pc +- int8(a)))
   of LDA: (a: short) => (program.main.get(a))
   of STZ: (a, b: byte) => (program.main.set(b, a))
-  of STR: (a, b: byte) => (program.main.set(program.pc + int8(b), a))
+  of STR: (a, b: byte) => (program.main.set(program.pc +- int8(b), a))
   of STA: (a, b: short) => (program.main.set(b, a))
   of DEI: (a: byte) => (program.io.get(a)) # todo
   of DEO: (a, b: byte) => (program.io.set(b, a)) # todo

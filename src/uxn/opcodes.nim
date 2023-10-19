@@ -1,15 +1,15 @@
-type Opcode* = uint8
+type Opcode* = byte
 
-func keep*(op: Opcode): bool =
+func keep_mode*(op: Opcode): bool =
   (op and 0b100_00000'u8) == 0b0
-func ret*(op: Opcode): bool =
+func return_mode*(op: Opcode): bool =
   (op and 0b010_00000'u8) == 0b0
-func short*(op: Opcode): bool =
+func short_mode*(op: Opcode): bool =
   (op and 0b001_00000'u8) == 0b0
 
 ## Get the raw instruction from an Opcode
 func ins*(op: Opcode): Opcode =
-  op and 0b000_11111'u8
+  op and 0b000_11111
 
 ## Enums in Nim are ordinal. These represent the opcodes, numerically.
 type Instruction* = enum
@@ -34,5 +34,5 @@ type Instruction* = enum
 type Label* = enum
   Zero One Two Three Four Five Six Seven Eight Nine Ten Eleven Twelve Thirteen Fourteen Fifteen
 
-## The enum Instruction is implicitly convertable to the uint8 Opcode
-converter instructify*(op: Instruction): Opcode = uint8(op.ord)
+## The enum Instruction is implicitly convertable to the byte Opcode
+converter instructify*(op: Instruction): Opcode = byte(op.ord)
