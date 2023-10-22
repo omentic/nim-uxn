@@ -98,6 +98,9 @@ func get*(memory: IOMemory, address: byte): byte =
   memory[address div 16][address mod 16]
 func set*(memory: var IOMemory, address: byte, value: byte) =
   memory[address div 16][address mod 16] = value
+func set*(memory: var IOMemory, address: byte, value: short) =
+  memory.set(address, byte(value shr 8))
+  memory.set(address + 1, byte(value and 0b11111111))
 func set*(memory: var IOMemory, address: range[0..15], value: Device) =
   memory[address] = value
 
@@ -134,7 +137,7 @@ func empty*(queue: Queue): bool =
   queue.front == queue.back
 
 ## Checked division
-template `//`*(a, b) =
+template `//`*(a, b): untyped =
   if `b` == 0:
     raise newException(ZeroDiv, "03 Division by Zero")
   else:
