@@ -9,44 +9,42 @@ macro generate_branches(opcode: Opcode, body: varargs[untyped]): untyped =
     if branch.kind == nnkOfBranch and branch[1].kind == nnkStmtList and
        branch[1][0].kind == nnkInfix and branch[1][0][0] == ident("=>"):
       let function = branch[1][0]
-      assert function[1].kind == nnkTupleConstr or function[1].kind == nnkPar
+      if function[1].kind notin {nnkTupleConstr, nnkPar}:
+        error("Expected a tuple!", function)
 
-      var byte_branch = nnkStmtList.newTree()
-      var short_branch = nnkStmtList.newTree()
+      var branchLogic = nnkStmtList.newTree()
       for param in function[1]:
         case param.kind
         of nnkIdent:
-          byte_branch.add quote do:
-            let `param` = program.pop8()
-          short_branch.add quote do:
-            let `param` = program.pop16()
+          branchLogic.add quote do:
+            let `param` =
+              when isShort:
+                program.pop16()
+              else:
+                program.pop8()
         of nnkExprColonExpr:
           let name = param[0]
-          if param[1] == ident("byte"):
-            byte_branch.add quote do:
+          case param[1].strVal
+          of "byte":
+            branchLogic.add quote do:
               let `name` = program.pop8()
-            short_branch.add quote do:
-              let `name` = program.pop8()
-          elif param[1] == ident("short"):
-            byte_branch.add quote do:
+          of "short":
+            branchLogic.add quote do:
               let `name` = program.pop16()
-            short_branch.add quote do:
-              let `name` = program.pop16()
+          else:
+            error("Unexpected type", param[1])
         else:
-          error("Expected a tuple of parameters!")
+          error("Expected a tuple of parameters!", branch)
 
-      byte_branch.add quote do: program.restore()
-      short_branch.add quote do: program.restore()
+      branchLogic.add quote do: program.restore()
 
       case function[2].kind
       of nnkTupleConstr, nnkPar:
         for operation in function[2]:
-          byte_branch.add quote do: program.push(`operation`)
-          short_branch.add quote do: program.push(`operation`)
+          branchLogic.add quote do: program.push(`operation`)
       of nnkBracket:
         for operation in function[2]:
-          byte_branch.add(operation)
-          short_branch.add(operation)
+          branchLogic.add(operation)
       else:
         error("Expected a tuple or a statement list!")
 
@@ -54,9 +52,11 @@ macro generate_branches(opcode: Opcode, body: varargs[untyped]): untyped =
       result[^1].add(branch[0])
       result[^1].add quote do:
         if program.opcode.short_mode():
-          `short_branch`
+          const isShort {.inject, used.} = true
+          `branchLogic`
         else:
-          `byte_branch`
+          const isShort {.inject, used.} = false
+          `branchLogic`
     else:
       result.add(branch)
 
